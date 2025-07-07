@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Script de configuration automatique pour VMs Debian/Ubuntu
-# Auteur: Marius B
+# Auteur: Votre nom
 # Version: 1.0
 
 set -euo pipefail
@@ -50,11 +50,16 @@ send_email() {
     local ip_address="$5"
     
     if [[ -z "$MAILJET_API_KEY" || -z "$MAILJET_SECRET_KEY" ]]; then
-        log_warning "Configuration Mailjet manquante, email non envoyé"
+        log_warning "Configuration Mailjet manquante, email non envoyé pour $username"
+        echo "Informations de connexion pour $username:"
+        echo "  Email: $to_email"
+        echo "  Mot de passe: $password"
+        echo "  SSH: ssh $username@$ip_address"
+        echo ""
         return 0
     fi
     
-    local email_body="Bonjour,
+    local text_body="Bonjour,
 
 Votre compte a été créé sur la machine virtuelle $hostname ($ip_address).
 
@@ -69,7 +74,21 @@ ssh $username@$ip_address
 Cordialement,
 L'équipe DevOps"
     
-    curl -s -X POST \
+    local html_body="<h3>Bonjour,</h3>
+<p>Votre compte a été créé sur la machine virtuelle <strong>$hostname</strong> ($ip_address).</p>
+<h4>Informations de connexion :</h4>
+<ul>
+<li><strong>Nom d'utilisateur :</strong> $username</li>
+<li><strong>Mot de passe :</strong> <code>$password</code></li>
+<li><strong>Adresse IP :</strong> $ip_address</li>
+</ul>
+<p>Vous pouvez vous connecter via SSH :</p>
+<code>ssh $username@$ip_address</code>
+<br><br>
+<p>Cordialement,<br>L'équipe DevOps</p>"
+    
+    # Utilisation de l'API v3.1 de Mailjet selon votre documentation
+    local response=$(curl -s -w "%{http_code}" -X POST \
         --user "$MAILJET_API_KEY:$MAILJET_SECRET_KEY" \
         https://api.mailjet.com/v3.1/send \
         -H "Content-Type: application/json" \
@@ -83,15 +102,29 @@ L'équipe DevOps"
                     \"Email\": \"$to_email\"
                 }],
                 \"Subject\": \"Accès VM - $hostname\",
-                \"TextPart\": \"$email_body\"
+                \"TextPart\": \"$text_body\",
+                \"HTMLPart\": \"$html_body\"
             }]
-        }" > /dev/null
+        }" \
+        -o /tmp/mailjet_response.json)
     
-    if [ $? -eq 0 ]; then
-        log_success "Email envoyé à $to_email"
+    local http_code="${response: -3}"
+    
+    if [[ "$http_code" == "200" ]]; then
+        local message_id=$(cat /tmp/mailjet_response.json | jq -r '.Messages[0].To[0].MessageID' 2>/dev/null || echo "N/A")
+        log_success "Email envoyé à $to_email (Message ID: $message_id)"
     else
-        log_error "Erreur lors de l'envoi de l'email à $to_email"
+        log_error "Erreur lors de l'envoi de l'email à $to_email (HTTP $http_code)"
+        log_info "Réponse: $(cat /tmp/mailjet_response.json 2>/dev/null || echo 'Aucune réponse')"
+        # Afficher les informations quand même
+        echo "Informations de connexion pour $username:"
+        echo "  Email: $to_email"
+        echo "  Mot de passe: $password"
+        echo "  SSH: ssh $username@$ip_address"
+        echo ""
     fi
+    
+    rm -f /tmp/mailjet_response.json
 }
 
 # Fonction pour vérifier si on est root
