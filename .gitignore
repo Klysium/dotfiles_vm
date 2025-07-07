@@ -1,0 +1,35 @@
+# Fichiers de configuration sensibles
+config.sh
+*.conf
+*.key
+*.pem
+
+# Logs
+*.log
+logs/
+
+# Fichiers temporaires
+*.tmp
+*.temp
+.DS_Store
+Thumbs.db
+
+# Éditeurs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Système
+.env
+.env.local
+.env.production
+
+# Sauvegardes
+*.bak
+*.backup
+
+# Cache
+.cache/
+node_modules/
